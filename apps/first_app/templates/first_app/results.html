@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Best of Glassdoor</title>
+    {% load static %}
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{% static 'first_app/results.css' %}">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <div class="top">
+            <h1>Best of Glassdoor</h1>
+            <br>
+            <br> {% if flag == 'Not_found' %}
+            <h2 style="color:rgb(231, 21, 21);">{{error}}</h2>
+            <br>
+            <h4>
+                <a href="/" style="text-decoration: none; color: black;">Back to Home</a>
+            </h4>
+            {% else %}
+            <h2>{{keyword}} jobs in {{city}}.</h2>
+            <form action="/results" method="post">
+                {% csrf_token %}
+                    <input name="keyword" placeholder=" Job title"> jobs in
+                    <input name="city" placeholder="City">
+                <button type="submit" class="btn btn-link">Modify search</button>
+            </form>
+            <br>
+        </div>
+        <div class="row">
+            <div class="col-md-3 col-xs-3" role="navigation">
+                    <h3>Top Paying</h3>
+                <div class="sidebar-nav">
+                    {% for element in salary_dict %}
+                    <li>
+                        <a href="{{element.Url}}">
+                            {{element.Name}}</a><br>
+                            <b>{{element.Company}} {{element.Location}}</b>
+                        <br> Glassdoor estimate: {{element.Salary}}
+                        <br>Glassdoor rating: {{element.Rating}}</li>
+                    <br> {% endfor %}
+                </div>
+            </div>
+            <div class="col-md-3 col-xs-3">
+                <h3>Highest Rated</h3>
+                <div class="sidebar-nav">
+                    {% for d in rating_dict%}
+                    <li>
+                        <a href="{{d.Url}}"> {{d.Name}}</a><br>
+                            <b>{{d.Company}} {{d.Location}}</b>
+                        <br>Glassdoor estimate: {{d.Salary}}
+                        <br>Glassdoor rating: {{d.Rating}}</li>
+                    <br> {% endfor %}
+                </div>
+            </div>
+            <div class="col-md-6 col-xs-6">
+                <div class="map">
+
+                    <h3>Check Your Commute</h3>
+                    <input id="origin-input" class="controls" type="text" placeholder="Enter an origin location">
+
+                    <input id="destination-input" class="controls" type="text" placeholder="Enter a destination location">
+
+                    <div id="mode-selector" class="controls">
+                        <input type="radio" name="type" id="changemode-driving" checked="checked">
+                        <label for="changemode-driving">Driving</label>
+
+                        <br>
+
+                        <input type="radio" name="type" id="changemode-transit">
+                        <label for="changemode-transit">Transit</label>
+                        <br>
+
+                        <input type="radio" name="type" id="changemode-walking">
+                        <label for="changemode-walking">Walking</label>
+                    </div>
+
+                    <div id="map"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    <script>
+
+        function initMap() {
+            var map = new google.maps.Map(document.getElementById('map'), {
+                mapTypeControl: false,
+                center: { lat: 37.774929, lng: -122.419416},
+                zoom: 13
+            });
+
+            new AutocompleteDirectionsHandler(map);
+        }
+
+        /**
+         * @constructor
+        */
+        function AutocompleteDirectionsHandler(map) {
+            this.map = map;
+            this.originPlaceId = null;
+            this.destinationPlaceId = null;
+            this.travelMode = 'WALKING';
+            var originInput = document.getElementById('origin-input');
+            var destinationInput = document.getElementById('destination-input');
+            var modeSelector = document.getElementById('mode-selector');
+            this.directionsService = new google.maps.DirectionsService;
+            this.directionsDisplay = new google.maps.DirectionsRenderer;
+            this.directionsDisplay.setMap(map);
+
+            var originAutocomplete = new google.maps.places.Autocomplete(
+                originInput, { placeIdOnly: true });
+            var destinationAutocomplete = new google.maps.places.Autocomplete(
+                destinationInput, { placeIdOnly: true });
+
+            this.setupClickListener('changemode-walking', 'WALKING');
+            this.setupClickListener('changemode-transit', 'TRANSIT');
+            this.setupClickListener('changemode-driving', 'DRIVING');
+
+            this.setupPlaceChangedListener(originAutocomplete, 'ORIG');
+            this.setupPlaceChangedListener(destinationAutocomplete, 'DEST');
+
+            this.map.controls[google.maps.ControlPosition.TOP_LEFT].push(originInput);
+            this.map.controls[google.maps.ControlPosition.TOP_LEFT].push(destinationInput);
+            this.map.controls[google.maps.ControlPosition.TOP_LEFT].push(modeSelector);
+        }
+
+        // Sets a listener on a radio button to change the filter type on Places
+        // Autocomplete.
+        AutocompleteDirectionsHandler.prototype.setupClickListener = function (id, mode) {
+            var radioButton = document.getElementById(id);
+            var me = this;
+            radioButton.addEventListener('click', function () {
+                me.travelMode = mode;
+                me.route();
+            });
+        };
+
+        AutocompleteDirectionsHandler.prototype.setupPlaceChangedListener = function (autocomplete, mode) {
+            var me = this;
+            autocomplete.bindTo('bounds', this.map);
+            autocomplete.addListener('place_changed', function () {
+                var place = autocomplete.getPlace();
+                if (!place.place_id) {
+                    window.alert("Please select an option from the dropdown list.");
+                    return;
+                }
+                if (mode === 'ORIG') {
+                    me.originPlaceId = place.place_id;
+                } else {
+                    me.destinationPlaceId = place.place_id;
+                }
+                me.route();
+            });
+
+        };
+
+        AutocompleteDirectionsHandler.prototype.route = function () {
+            if (!this.originPlaceId || !this.destinationPlaceId) {
+                return;
+            }
+            var me = this;
+
+            this.directionsService.route({
+                origin: { 'placeId': this.originPlaceId },
+                destination: { 'placeId': this.destinationPlaceId },
+                travelMode: this.travelMode
+            }, function (response, status) {
+                if (status === 'OK') {
+                    me.directionsDisplay.setDirections(response);
+                } else {
+                    window.alert('Directions request failed due to ' + status);
+                }
+            });
+        };
+
+    </script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyC2EUVINr2V_YzCsFlXL7_Oe5jxCwiLW54&libraries=places&callback=initMap"
+        async defer></script>
+</body>
+
+</html>
